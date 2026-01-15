@@ -5,17 +5,23 @@ A self-hosted Python HTTP service using FastAPI and yt-dlp to fetch YouTube tran
 ## Features
 
 - Fetch YouTube video transcripts by URL or video ID
+- **AI-powered summarization** using GitHub Copilot CLI (short, medium, long)
 - Support for multiple languages
 - Automatic and manual subtitle support
 - Response formats: JSON (with timestamps) or plain text
-- Filesystem-based caching for improved performance
+- Filesystem-based caching for transcripts and summaries
 - Concurrency control to prevent resource exhaustion
 - No video/audio downloads - subtitles only
+- Cross-platform support (Windows & Linux)
 
 ## Requirements
 
 - Python 3.11+
 - yt-dlp (installed automatically with dependencies)
+- **GitHub Copilot CLI** (optional, for summarization feature):
+  ```bash
+  npm install -g @github/copilot-cli
+  ```
 
 ## Installation
 
@@ -64,6 +70,7 @@ The server will start on `http://127.0.0.1:8000` by default.
 - `lang` (optional): Language code (default: `en`)
 - `format` (optional): Response format - `json` or `text` (default: `json`)
 - `timestamps` (optional): Include timestamps in JSON response (default: `true`)
+- `summary` (optional): Generate AI summary - `short`, `medium`, or `long`
 
 **Examples:**
 
@@ -82,6 +89,15 @@ curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&lang=es"
 
 # Get transcript without timestamps
 curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&timestamps=false"
+
+# Get short AI summary (50-70 words)
+curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&summary=short"
+
+# Get medium AI summary (250-350 words)
+curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=medium"
+
+# Get long AI summary as plain text (500-700 words)
+curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=long&format=text"
 ```
 
 **Response (JSON format):**
@@ -108,6 +124,22 @@ curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&timestamps=false"
 **Response (text format):**
 ```
 Never gonna give you up Never gonna let you down...
+```
+
+**Summary Response (JSON format):**
+```json
+{
+  "video_id": "dQw4w9WgXcQ",
+  "language": "en",
+  "summary_length": "short",
+  "summary": "The file contains full lyrics to Rick Astley's \"Never Gonna Give You Up,\" repeated in places (verses, chorus, and refrains). It lists lines of the song including verses about commitment, recognizing feelings, and the repeated chorus promising never to give up, let down, run around, desert, make cry, say goodbye, or lie and hurt you.",
+  "is_generated": false
+}
+```
+
+**Summary Response (text format):**
+```
+The file contains full lyrics to Rick Astley's "Never Gonna Give You Up," repeated in places...
 ```
 
 #### Health Check
@@ -140,6 +172,11 @@ Configuration is managed through environment variables or the `.env` file:
 | `YTDLP_TIMEOUT` | `30` | yt-dlp timeout in seconds |
 | `MAX_CONCURRENT_PROCESSES` | `2` | Max concurrent yt-dlp processes |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `COPILOT_CLI_PATH` | `copilot` | Path to Copilot CLI executable |
+| `COPILOT_TIMEOUT` | `120` | Copilot CLI timeout in seconds |
+| `COPILOT_MODEL` | `gpt-5-mini` | AI model for summarization |
+| `MAX_CONCURRENT_COPILOT` | `1` | Max concurrent Copilot requests |
+| `SUMMARY_CACHE_ENABLED` | `true` | Enable/disable summary caching |
 
 ## Error Responses
 
@@ -149,15 +186,60 @@ Configuration is managed through environment variables or the `.env` file:
 | 404 | No subtitles found for the video |
 | 408 | Request timeout (yt-dlp took too long) |
 | 500 | Internal server error |
+| 503 | Copilot CLI not available (summarization only) |
 
 ## Caching
 
-The service caches transcripts in the filesystem to improve performance:
+The service caches both transcripts and summaries in the filesystem to improve performance:
 
+**Transcript Caching:**
 - Cache files are stored in `./cache/` by default
 - Cache key format: `{video_id}_{lang}.json`
 - Cache hits return results in < 10ms
-- Cache can be disabled via `CACHE_ENABLED=false`
+- Can be disabled via `CACHE_ENABLED=false`
+
+**Summary Caching:**
+- Cache key format: `{video_id}_{lang}_summary_{length}.json`
+- Each summary length (short/medium/long) is cached separately
+- Prevents redundant AI requests and saves Copilot Premium usage
+- Can be disabled via `SUMMARY_CACHE_ENABLED=false`
+
+## AI Summarization
+
+The service includes AI-powered summarization using GitHub Copilot CLI with the `gpt-5-mini` model.
+
+### Summary Lengths
+
+- **Short** (50-70 words): Quick overview of the video content
+- **Medium** (250-350 words): Detailed summary with key points
+- **Long** (500-700 words): Comprehensive analysis with context
+
+### How It Works
+
+1. Transcript is saved to a temporary file (to bypass Windows CLI length limits)
+2. Copilot CLI is invoked with a prompt to read and summarize the file
+3. Summary is cached to avoid redundant AI requests
+4. Works cross-platform (Windows `.CMD` files, Linux direct execution)
+
+### Example Use Cases
+
+```bash
+# Quick summary for social media
+curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&summary=short&format=text"
+
+# Detailed summary for blog post
+curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=medium"
+
+# Full analysis for documentation
+curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=long&format=text"
+```
+
+### Notes
+
+- Requires GitHub Copilot subscription (uses Premium requests)
+- Summary generation takes 5-30 seconds depending on transcript length
+- Very long videos (>90K chars) are fully supported
+- UTF-8 encoding with error handling for special characters
 
 ## Development
 
@@ -178,8 +260,9 @@ yt-transcriber/
 │   │   └── vtt_parser.py    # WebVTT parser
 │   └── services/
 │       ├── __init__.py
-│       ├── cache_manager.py # Caching layer
-│       └── subtitle_extractor.py # yt-dlp wrapper
+│       ├── cache_manager.py      # Caching layer
+│       ├── subtitle_extractor.py # yt-dlp wrapper
+│       └── summarizer.py         # Copilot CLI wrapper
 ├── cache/                   # Cache directory (created automatically)
 ├── plans/                   # Implementation plans
 ├── specs/                   # PRD and specifications
