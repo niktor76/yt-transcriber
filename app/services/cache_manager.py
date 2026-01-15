@@ -23,6 +23,11 @@ class CacheManager:
         filename = f"{video_id}_{language}.json"
         return self.cache_dir / filename
 
+    def _get_summary_cache_path(self, video_id: str, language: str, length: str) -> Path:
+        """Generate cache file path for a summary"""
+        filename = f"{video_id}_{language}_summary_{length}.json"
+        return self.cache_dir / filename
+
     def get(self, video_id: str, language: str) -> Optional[tuple[List[TranscriptSegment], bool]]:
         """
         Retrieve cached transcript segments.
@@ -91,6 +96,79 @@ class CacheManager:
         except IOError as e:
             logger.error(f"Failed to write cache for {video_id}_{language}: {e}")
 
+    def get_summary(self, video_id: str, language: str, length: str) -> Optional[str]:
+        """
+        Retrieve cached summary.
+
+        Args:
+            video_id: YouTube video ID
+            language: Language code
+            length: Summary length ('short', 'medium', 'long')
+
+        Returns:
+            Summary text if found, None otherwise
+        """
+        if not config.SUMMARY_CACHE_ENABLED:
+            return None
+
+        cache_path = self._get_summary_cache_path(video_id, language, length)
+
+        if not cache_path.exists():
+            logger.debug(f"Summary cache miss: {video_id}_{language}_{length}")
+            return None
+
+        try:
+            with cache_path.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            summary = data.get('summary_text')
+            logger.info(f"Summary cache hit: {video_id}_{language}_{length}")
+            return summary
+
+        except (json.JSONDecodeError, KeyError, IOError) as e:
+            logger.warning(f"Failed to read summary cache for {video_id}_{language}_{length}: {e}")
+            return None
+
+    def set_summary(self, video_id: str, language: str, length: str, summary: str, is_generated: bool):
+        """
+        Store summary in cache.
+
+        Args:
+            video_id: YouTube video ID
+            language: Language code
+            length: Summary length ('short', 'medium', 'long')
+            summary: Summary text
+            is_generated: Whether original subtitles were auto-generated
+        """
+        if not config.SUMMARY_CACHE_ENABLED:
+            return
+
+        cache_path = self._get_summary_cache_path(video_id, language, length)
+
+        try:
+            from datetime import datetime, timezone
+
+            data = {
+                'video_id': video_id,
+                'language': language,
+                'summary_length': length,
+                'summary_text': summary,
+                'is_generated': is_generated,
+                'generated_at': datetime.now(timezone.utc).isoformat(),
+                'model': config.COPILOT_MODEL
+            }
+
+            # Atomic write: write to temp file then rename
+            temp_path = cache_path.with_suffix('.tmp')
+            with temp_path.open('w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+            temp_path.replace(cache_path)
+            logger.info(f"Cached summary: {video_id}_{language}_{length}")
+
+        except IOError as e:
+            logger.error(f"Failed to write summary cache for {video_id}_{language}_{length}: {e}")
+
     def clear(self, video_id: Optional[str] = None, language: Optional[str] = None):
         """
         Clear cache entries.
@@ -117,7 +195,7 @@ class CacheManager:
                 logger.info(f"Cleared cache: {cache_file.name}")
 
         else:
-            # Clear entire cache
+            # Clear entire cache (including summaries)
             for cache_file in self.cache_dir.glob("*.json"):
                 cache_file.unlink()
             logger.info("Cleared entire cache")

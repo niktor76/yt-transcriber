@@ -17,6 +17,21 @@ class TranscriptResponse(BaseModel):
     segments: List[TranscriptSegment] = Field(..., description="List of transcript segments")
 
 
+class SummaryResponse(BaseModel):
+    """Response model for summarized transcript"""
+    video_id: str = Field(..., description="YouTube video ID")
+    language: str = Field(..., description="Language code of the transcript")
+    summary_length: Literal["short", "medium", "long"] = Field(
+        ...,
+        description="Length of the summary"
+    )
+    summary: str = Field(..., description="Generated summary text")
+    is_generated: bool = Field(
+        ...,
+        description="Whether original subtitles were auto-generated"
+    )
+
+
 class ErrorResponse(BaseModel):
     """Error response model"""
     error: str = Field(..., description="Error message")

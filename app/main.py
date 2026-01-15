@@ -1,10 +1,17 @@
 import logging
+import sys
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
 from app.api.transcript import router as transcript_router
 
+# Windows-specific fix for asyncio subprocess support
+if sys.platform == "win32":
+    # Set the event loop policy to use WindowsProactorEventLoopPolicy
+    # This enables subprocess support on Windows with asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # Configure logging
 logging.basicConfig(

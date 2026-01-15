@@ -16,6 +16,16 @@ class Config:
     YTDLP_TIMEOUT: int = int(os.getenv("YTDLP_TIMEOUT", "30"))
     MAX_CONCURRENT_PROCESSES: int = int(os.getenv("MAX_CONCURRENT_PROCESSES", "2"))
 
+    # GitHub Copilot CLI settings (for summarization)
+    COPILOT_CLI_PATH: str = os.getenv("COPILOT_CLI_PATH", "copilot")
+    COPILOT_TIMEOUT: int = int(os.getenv("COPILOT_TIMEOUT", "120"))
+    COPILOT_MODEL: str = os.getenv("COPILOT_MODEL", "gpt-5-mini")
+    MAX_CONCURRENT_COPILOT: int = int(os.getenv("MAX_CONCURRENT_COPILOT", "1"))
+
+    # Summary settings
+    SUMMARY_CACHE_ENABLED: bool = os.getenv("SUMMARY_CACHE_ENABLED", "true").lower() == "true"
+    MAX_TRANSCRIPT_LENGTH: int = int(os.getenv("MAX_TRANSCRIPT_LENGTH", "100000"))
+
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
