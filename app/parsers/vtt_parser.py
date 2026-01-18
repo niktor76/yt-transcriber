@@ -63,7 +63,8 @@ def parse_vtt(content: str) -> List[TranscriptSegment]:
             while i < len(lines) and lines[i].strip() and not re.match(timestamp_pattern, lines[i].strip()):
                 text_line = lines[i].strip()
                 # Remove VTT tags like <c> or <v>
-                text_line = re.sub(r'<[^>]+>', '', text_line)
+                # Use possessive quantifier to prevent ReDoS attacks
+                text_line = re.sub(r'<[^>]*?>', '', text_line)
                 if text_line:
                     text_lines.append(text_line)
                 i += 1

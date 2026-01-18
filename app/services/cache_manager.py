@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Optional, List
 from app.config import config
@@ -18,15 +19,48 @@ class CacheManager:
         if self.enabled:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+    def _validate_cache_params(self, video_id: str, language: str):
+        """Validate video_id and language to prevent path traversal attacks"""
+        # YouTube video IDs are 11 characters: alphanumeric, underscore, hyphen
+        if not re.match(r'^[a-zA-Z0-9_-]{11}$', video_id):
+            raise ValueError(f"Invalid video_id format: {video_id}")
+
+        # Language codes: IETF BCP 47 format (e.g., 'en', 'en-US', 'pt-BR', 'zh-CN')
+        # Pattern: 2-3 lowercase letters, optionally followed by hyphen and 2-4 letter region/script code
+        if not re.match(r'^[a-z]{2,3}(-[A-Za-z]{2,4})?$', language):
+            raise ValueError(f"Invalid language code: {language}")
+
     def _get_cache_path(self, video_id: str, language: str) -> Path:
         """Generate cache file path for a video and language"""
+        # Validate inputs to prevent path traversal
+        self._validate_cache_params(video_id, language)
+
         filename = f"{video_id}_{language}.json"
-        return self.cache_dir / filename
+        cache_path = self.cache_dir / filename
+
+        # Extra safety: ensure resolved path is within cache_dir
+        if not cache_path.resolve().is_relative_to(self.cache_dir.resolve()):
+            raise ValueError("Path traversal attempt detected")
+
+        return cache_path
 
     def _get_summary_cache_path(self, video_id: str, language: str, length: str) -> Path:
         """Generate cache file path for a summary"""
+        # Validate inputs to prevent path traversal
+        self._validate_cache_params(video_id, language)
+
+        # Validate summary length
+        if length not in ["short", "medium", "long"]:
+            raise ValueError(f"Invalid summary length: {length}")
+
         filename = f"{video_id}_{language}_summary_{length}.json"
-        return self.cache_dir / filename
+        cache_path = self.cache_dir / filename
+
+        # Extra safety: ensure resolved path is within cache_dir
+        if not cache_path.resolve().is_relative_to(self.cache_dir.resolve()):
+            raise ValueError("Path traversal attempt detected")
+
+        return cache_path
 
     def get(self, video_id: str, language: str) -> Optional[tuple[List[TranscriptSegment], bool]]:
         """

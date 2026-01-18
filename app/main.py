@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.config import config
 from app.api.transcript import router as transcript_router
 
@@ -46,17 +47,41 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware (configure as needed)
+# Add CORS middleware - restricted for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=config.ALLOWED_ORIGINS,  # Configured via environment variable
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],  # Only needed methods
+    allow_headers=["Content-Type", "Accept"],
 )
 
 # Include routers
 app.include_router(transcript_router, tags=["transcript"])
+
+# Mount static files for demo page
+from pathlib import Path
+demo_path = Path(__file__).parent.parent / "public" / "demo"
+
+# Security: Validate demo directory before mounting
+if demo_path.exists():
+    # Resolve to absolute path and check it's a real directory (not a symlink)
+    resolved_path = demo_path.resolve()
+
+    # Ensure it's within the expected public directory
+    expected_base = (Path(__file__).parent.parent / "public").resolve()
+
+    if resolved_path.is_dir() and resolved_path.is_relative_to(expected_base):
+        # Additional check: ensure the path itself isn't a symlink
+        if not demo_path.is_symlink():
+            app.mount("/demo", StaticFiles(directory=str(demo_path), html=True), name="demo")
+            logger.info(f"Demo page mounted at /demo -> {resolved_path}")
+        else:
+            logger.warning("Demo directory is a symlink - not mounting for security")
+    else:
+        logger.warning(f"Demo path validation failed - not mounting")
+else:
+    logger.info("Demo directory not found - skipping demo page mount")
 
 
 @app.get("/", tags=["health"])

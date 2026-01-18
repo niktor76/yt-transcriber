@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**IMPORTANT:** Always read `MEMORY.md` first to understand the current work-in-progress and active problems.
+
 ## Project Overview
 
 YouTube Transcript Service - A self-hosted FastAPI service that fetches YouTube transcripts using yt-dlp without third-party APIs. The service extracts subtitles (manual or auto-generated), caches them locally, and serves them via HTTP endpoints in JSON or plain text format.

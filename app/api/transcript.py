@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Union, Optional, Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
@@ -52,6 +53,14 @@ async def get_transcript(
     Returns transcript segments with timing information, plain text, or a summary.
     """
     try:
+        # Validate language code FIRST (before any service calls)
+        # IETF BCP 47 format: 2-3 letters, optionally followed by region/script code
+        if not re.match(r'^[a-z]{2,3}(-[A-Za-z]{2,4})?$', lang):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid language code: {lang}. Must be ISO 639 format (e.g., 'en', 'en-US', 'pt-BR')"
+            )
+
         # Extract video ID for caching
         video_id = subtitle_extractor._extract_video_id(url)
 
@@ -77,6 +86,14 @@ async def get_transcript(
             else:
                 # Generate summary using Copilot CLI
                 transcript_text = segments_to_plain_text(segments)
+
+                # Validate transcript length before expensive summarization
+                if len(transcript_text) > config.MAX_TRANSCRIPT_LENGTH:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Transcript too long ({len(transcript_text):,} characters). Maximum: {config.MAX_TRANSCRIPT_LENGTH:,}"
+                    )
+
                 logger.info(f"Generating summary: {video_id} ({lang}, {summary})")
                 summary_text = await summarizer.summarize(transcript_text, summary)
 
@@ -116,6 +133,15 @@ async def get_transcript(
                 response.segments = segments
 
             return response
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (including our validation errors) - MUST BE FIRST
+        raise
+
+    except ValueError as e:
+        # Validation errors from cache_manager or other services
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
     except InvalidURLError as e:
         logger.warning(f"Invalid URL: {url}")

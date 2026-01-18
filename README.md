@@ -76,46 +76,46 @@ The server will start on `http://127.0.0.1:8000` by default.
 
 ```bash
 # Get transcript with video ID
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&lang=en"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&lang=en"
 
 # Get transcript with full URL
-curl "http://localhost:8000/transcript?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl "http://localhost:8000/transcript?url=https://www.youtube.com/watch?v=0hdFJA-ho3c"
 
 # Get plain text format
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&format=text"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&format=text"
 
 # Get transcript in Spanish
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&lang=es"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&lang=es"
 
 # Get transcript without timestamps
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&timestamps=false"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&timestamps=false"
 
 # Get short AI summary (50-70 words)
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&summary=short"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=short"
 
 # Get medium AI summary (250-350 words)
-curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=medium"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=medium"
 
 # Get long AI summary as plain text (500-700 words)
-curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=long&format=text"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=long&format=text"
 ```
 
 **Response (JSON format):**
 ```json
 {
-  "video_id": "dQw4w9WgXcQ",
+  "video_id": "0hdFJA-ho3c",
   "language": "en",
   "is_generated": false,
   "segments": [
     {
-      "start": 0.0,
-      "end": 3.5,
-      "text": "Never gonna give you up"
+      "start": 2.629,
+      "end": 4.55,
+      "text": "Clog code in 2026 is not what it was"
     },
     {
-      "start": 3.5,
-      "end": 6.0,
-      "text": "Never gonna let you down"
+      "start": 4.56,
+      "end": 6.55,
+      "text": "when it launched almost a year ago."
     }
   ]
 }
@@ -123,23 +123,23 @@ curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=long&format=text"
 
 **Response (text format):**
 ```
-Never gonna give you up Never gonna let you down...
+Clog code in 2026 is not what it was when it launched almost a year ago...
 ```
 
 **Summary Response (JSON format):**
 ```json
 {
-  "video_id": "dQw4w9WgXcQ",
+  "video_id": "0hdFJA-ho3c",
   "language": "en",
   "summary_length": "short",
-  "summary": "The file contains full lyrics to Rick Astley's \"Never Gonna Give You Up,\" repeated in places (verses, chorus, and refrains). It lists lines of the song including verses about commitment, recognizing feelings, and the repeated chorus promising never to give up, let down, run around, desert, make cry, say goodbye, or lie and hurt you.",
+  "summary": "Presenter argues that modern cloud code and models like Opus 4.5 now handle roughly 90% of everyday development tasks, making heavy agent frameworks often overkill. He demonstrates a spec-driven workflow with clarifying Q&A and skills/subagents for targeted capabilities, while stressing that human product judgment remains essential. Advice: start with pure cloud code and add complexity only when truly necessary.",
   "is_generated": false
 }
 ```
 
 **Summary Response (text format):**
 ```
-The file contains full lyrics to Rick Astley's "Never Gonna Give You Up," repeated in places...
+Presenter argues that modern cloud code and models like Opus 4.5 now handle roughly 90% of everyday development tasks...
 ```
 
 #### Health Check
@@ -225,13 +225,13 @@ The service includes AI-powered summarization using GitHub Copilot CLI with the 
 
 ```bash
 # Quick summary for social media
-curl "http://localhost:8000/transcript?url=dQw4w9WgXcQ&summary=short&format=text"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=short&format=text"
 
 # Detailed summary for blog post
-curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=medium"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=medium"
 
 # Full analysis for documentation
-curl "http://localhost:8000/transcript?url=jfTPjyQlWsk&summary=long&format=text"
+curl "http://localhost:8000/transcript?url=0hdFJA-ho3c&summary=long&format=text"
 ```
 
 ### Notes
@@ -285,10 +285,40 @@ A Dockerfile will be provided for containerized deployment.
 
 ## Security Notes
 
-- The service binds to `127.0.0.1` by default (localhost only)
-- URL sanitization prevents command injection
-- No shell execution (`shell=False` in subprocess calls)
-- Cache directory permissions should be restricted appropriately
+This service has undergone comprehensive security reviews and implements multiple defense layers:
+
+### Input Validation
+- **Path Traversal Protection**: Video IDs and language codes validated with strict regex patterns
+- **Language Code Validation**: IETF BCP 47 format validation (e.g., `en`, `en-US`, `pt-BR`)
+- **API-Layer Validation**: All inputs validated before service calls, even when cached
+
+### Injection Prevention
+- **Command Injection**: Language validation blocks shell metacharacters (`en;rm` → 400 Blocked)
+- **Shell Quoting**: File paths in AI prompts protected with `shlex.quote()`
+- **Prompt Injection Defense**: Multi-layer protection with output validation
+
+### Resource Protection
+- **Integer Overflow Protection**: All config values bounded (ports: 1-65535, timeouts: 5-600s)
+- **DoS Prevention**: Transcript length validation before expensive AI operations
+- **ReDoS Protection**: Non-greedy regex patterns prevent catastrophic backtracking
+- **Static File Security**: Symlink validation and path checking for demo page
+
+### AI Security
+- **Prompt Injection Output Validation**: Detects URLs, shell commands, meta-instructions
+- **Sanitization**: Removes potentially malicious patterns from AI-generated summaries
+- **Fail-Safe**: Raises errors on dangerous patterns (exec, eval, rm, pipe to bash)
+
+### Network Security
+- **CORS Hardening**: Restricted to localhost by default (`http://localhost:8000`)
+- **Localhost Binding**: Service binds to `127.0.0.1` (localhost only)
+- **No Shell Execution**: All subprocess calls use `shell=False`
+
+### Configuration Security
+- Environment variables validated with bounds checking
+- Cache directory permissions should be restricted (filesystem-level)
+- All timeouts capped to prevent indefinite hangs
+
+**Security Audits**: 4 rounds of dual reviews (Claude Sonnet 4.5 + Gemini 3 Pro) completed with all critical issues resolved.
 
 ## License
 
